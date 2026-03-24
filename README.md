@@ -1,71 +1,100 @@
-# Unitree go2, go1 simulation in Gazebo Sim
+# Unitree Go2 / Go1 Simulation in Gazebo Sim
 
-This repository allows you to run dog robots in the GAZEBO simulator. The robot can walk, rotate with 12 degrees of freedom, and features a `robot_msgs` interface. The robot moves using inverse kinematics, and its odometry is based on direct kinematics. Additionally, all functionalities are developed in Python.
+Simulate Unitree quadruped robots (Go2 and Go1) in Gazebo Harmonic with full ROS2 integration. The robot walks and rotates with 12 degrees of freedom, uses inverse kinematics for motion, direct kinematics for odometry, and exposes a `quadropted_msgs` interface. All control logic is written in Python.
 
-
-## Run from docker 
-
-> **Note:** BUILDED AND TESTED WITH NVIDIA GPU.
-
-### setup docker, docker compose and nvidia container toolkit
-[docker install](https://docs.docker.com/engine/install/ubuntu/)
-
-[nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-### build docker :
-
-```bash
-mkdir -p ~/go_sim/src
-cd ~/go_sim/src/docker
-docker compose -f compose.yml build simulator
-xhost +local:docker
-docker compose -f compose.yml up simulator
-```
-
-
-## Run from source
-
-> **Note:** BUILDED AND TESTED FROM ROS2 JAZZY, UBUNTU 22.04.
-
-> **Note:** Before launching, ensure that you install all dependencies and build the project using `colcon build`.
+![Robot moving](media/robot_move.gif)
 
 ---
 
-## Setup and Installation
+## Platform
 
-### Clone the Repository and Build
+| | |
+|---|---|
+| **OS** | Ubuntu 24.04 (Noble) |
+| **ROS2** | Jazzy |
+| **Simulator** | Gazebo Harmonic |
+| **Tested on** | WSL2 (Windows 11) + NVIDIA GPU |
+
+> **Note:** ROS2 Jazzy requires Ubuntu 24.04. The Docker path in this repo targets bare-metal NVIDIA and is not recommended for WSL2 — use the install script below instead.
+
+---
+
+## Installation
+
+### WSL2 — Recommended (one-shot script)
+
+If you don't have Ubuntu 24.04 in WSL2 yet, run this in PowerShell first:
+
+```powershell
+wsl --install -d Ubuntu-24.04
+```
+
+Then inside your WSL2 terminal:
+
+```bash
+# Download the install script
+curl -O https://raw.githubusercontent.com/prgrobots/go2_ros2_sim_py/main/install/go2_sim_setup.sh
+
+# Make it executable and run it (do NOT use sudo)
+chmod +x go2_sim_setup.sh
+./go2_sim_setup.sh
+```
+
+The script handles everything in order:
+1. System update and UTF-8 locale
+2. ROS2 Jazzy desktop (includes Gazebo Harmonic)
+3. Gazebo bridge and `ros2_control` packages
+4. Nav2 stack
+5. CycloneDDS and teleop tools
+6. WSL2 NVIDIA GPU passthrough (`/usr/lib/wsl/lib`)
+7. Repo clone and `rosdep install`
+8. `colcon build`
+9. Environment file at `~/go_sim/go2_sim.env`
+
+> **NVIDIA note:** Do NOT install NVIDIA drivers inside WSL2. They live on the Windows host and are exposed automatically. Your Windows driver must be ≥ 510.
+
+> **Display note:** WSLg (built into Windows 11 and Win10 21H2+) works out of the box. If you're using VcXsrv or Xming, start it first with *Disable access control* checked.
+
+---
+
+### Manual installation (build from source)
+
+<details>
+<summary>Expand manual steps</summary>
+
+**1. Install ROS2 Jazzy**
+
+Follow the [official ROS2 Jazzy installation guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html) for Ubuntu 24.04.
+
+**2. Install dependencies**
+
+```bash
+sudo apt install -y \
+  ros-jazzy-ros-gz ros-jazzy-ros-gz-bridge ros-jazzy-ros-gz-sim \
+  ros-jazzy-gz-ros2-control ros-jazzy-ros2-control ros-jazzy-ros2-controllers \
+  ros-jazzy-joint-state-publisher ros-jazzy-robot-state-publisher ros-jazzy-xacro \
+  ros-jazzy-navigation2 ros-jazzy-nav2-bringup \
+  ros-jazzy-rmw-cyclonedds-cpp ros-jazzy-teleop-twist-keyboard \
+  python3-colcon-common-extensions python3-rosdep
+```
+
+**3. Clone and build**
 
 ```bash
 mkdir -p ~/go_sim/src
 cd ~/go_sim/src
-git clone https://github.com/abutalipovvv/go_sim_py.git .
-cd ..
-colcon build --symlink-install
-```
-
-### Install Dependencies
-
-```bash
+git clone https://github.com/prgrobots/go2_ros2_sim_py.git .
 cd ~/go_sim
 rosdep update
 rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
 ```
 
-## Environment Configuration
+**4. Configure CycloneDDS**
 
-### Export Gazebo Models Path
+Create `~/.ros/cyclonedds.xml`:
 
-Before running the simulation, export the path to your Gazebo models:
-
-```bash
-export GZ_SIM_RESOURCE_PATH=~/go_sim/src/gazebo_sim/models
-```
-(Replace with the correct path to your models.)
-
-### Configure CycloneDDS
-
-To support multiple topics, configure CycloneDDS by creating a configuration file (e.g., cyclonedds.xml) with the following content:
-
-```bash
+```xml
 <CycloneDDS>
   <Domain>
     <General>
@@ -81,119 +110,156 @@ To support multiple topics, configure CycloneDDS by creating a configuration fil
   </Domain>
 </CycloneDDS>
 ```
-Then, set the environment variable to point to this file:
 
-```bash
-export CYCLONEDDS_URI=file://path_to_cyclonedds.xml
-```
+</details>
 
-(Replace `path_to_cyclonedds.xml` with the actual file path.)
+---
 
 ## Running the Simulation
 
+### Step 1 — Source the environment
+
+**Every terminal** that runs ROS2 or Gazebo commands needs this sourced first:
+
 ```bash
-#Navigate to the project directory:
+source ~/go_sim/go2_sim.env
+```
 
-cd ~/go_sim
+To make this automatic in every new terminal:
 
-#Source the environment setup:
+```bash
+echo "source ~/go_sim/go2_sim.env" >> ~/.bashrc
+```
 
-source install/local_setup.bash
+> If you get `ros2: command not found`, you forgot to source.
 
-#Launch the simulation:
+### Step 2 — Launch Gazebo
 
+```bash
 ros2 launch gazebo_sim launch.py
 ```
+
+---
 
 ## Controlling the Robot
 
 ### Moving the Robot
 
-The robot moves by publishing velocity commands to the `<robot_namespace>/cmd_vel` topic. By default, the robot is named robot1.
+The robot accepts velocity commands on `<robot_namespace>/cmd_vel`. The default namespace is `robot1`.
 
-Example using `teleop_twist_keyboard`:
-
-```bash
-source install/local_setup.bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r /cmd_vel:=/robot1/cmd_vel
-```
-
-
-![](./media/robot_move.gif)
-
-Robot Modes
-
-The robot supports several modes:
-
-    REST – Default position in which the robot cannot move.
-    STAND – Mode in which the robot can rotate in place.
-    TROT – Walking mode.
-
-The robot operates with 12 degrees of freedom. To enable rotation, switch the mode to "STAND" by publishing to the robot_mode topic.
-
-Example (for a robot with namespace `robot1`):
+In a new terminal (remember to source first):
 
 ```bash
-ros2 topic pub /robot1/robot_mode quadropted_msgs/msg/RobotModeCommand "{mode: 'STAND', robot_id: 1}"
+source ~/go_sim/go2_sim.env
+ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+  --ros-args -r /cmd_vel:=/robot1/cmd_vel
 ```
 
-After switching modes, control the robot using velocity commands:
+### Robot Modes
+
+The robot has three modes:
+
+| Mode | Description |
+|------|-------------|
+| `REST` | Default. Robot holds position, cannot walk. |
+| `STAND` | Robot can rotate in place. |
+| `TROT` | Walking mode. |
+
+Switch modes by publishing to the `robot_mode` topic:
 
 ```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args -r /cmd_vel:=/robot1/cmd_vel
+ros2 topic pub /robot1/robot_mode quadropted_msgs/msg/RobotModeCommand \
+  "{mode: 'STAND', robot_id: 1}"
 ```
 
+![Mode switching](media/move1.gif)
 
-![](./media/move1.gif)
+### Sit / Stand / Walk Behaviours
 
-### Changing Robot Behavior
-
-The robot can sit and stand using the `robot_behavior_command` service.
-
-Example command:
+Use the `robot_behavior_command` service:
 
 ```bash
-ros2 service call /robot1/robot_behavior_command quadropted_msgs/srv/RobotBehaviorCommand "{command: 'walk'}"
+ros2 service call /robot1/robot_behavior_command \
+  quadropted_msgs/srv/RobotBehaviorCommand "{command: 'walk'}"
 ```
 
-Possible commands:
+| Command | Behaviour |
+|---------|-----------|
+| `walk` | Stands up (REST) and enables walking (TROT) |
+| `up` | Stands up (REST) and locks movement |
+| `sit` | Sits down (STAND) |
 
-    walk – The robot stands up (REST) and can walk (TROT).
-    up – The robot stands up (REST) and locks movement.
-    sit – The robot sits down (STAND).
+![Sit/stand](media/sitUp.gif)
 
-![](./media/sitUp.gif)
+---
 
-## Multi-Robot Setup and Model Switching
+## Multi-Robot Setup
 
-### Changing Robot Models
+### Switching Between Go2 and Go1
 
-You can change between robot models (e.g., go2, go1) in gazebo_multi_nav2_world.launch.py file 102 str:
+Edit line 102 of `gazebo_sim/launch/gazebo_multi_nav2_world.launch.py`:
 
-![](./media/switch.png)
+```python
+# Go2:
+robot_description_package = "go2_description"
 
-for go2: use "go2_description" 
-for go1: use "go1_description"
+# Go1:
+robot_description_package = "go1_description"
+```
 
-Running Multiple Robots Simultaneously
-![](./media/go1multi.png)
-![](./media/go2multi.png)
-### The repository supports simultaneous operation of multiple robots. Each robot has access to nav2. In the robot.config file, add the robot’s namespace and spawn coordinates in the world.
-![](./media/robot_config.png)
+![Model switching](media/switch.png)
 
-### NAV2 work demonstration: 
-![](./media/robot-nav2.gif)
+### Adding Multiple Robots
 
+Edit `robot.config` to add namespaces and spawn coordinates:
 
-## Credits, thaks for all
+![Robot config](media/robot_config.png)
 
-    mike4192: (SpotMicro)[https://github.com/mike4192/spotMicro]
-    Unitree Robotics: (A1 ROS)[https://github.com/unitreerobotics/a1_ros]
-    QUADRUPED ROBOTICS: (Quadruped)[https://quadruped.de]
-    lnotspotl: (GitHub)[https://github.com/lnotspotl]
-    anujjain-dev: (Unitree-go2 ROS2)[https://github.com/anujjain-dev/unitree-go2-ros2]
+Each robot gets its own Nav2 stack automatically.
+
+![Go1 multi-robot](media/go1multi.png)
+![Go2 multi-robot](media/go2multi.png)
+
+### Nav2 Demo
+
+![Nav2](media/robot-nav2.gif)
+
+---
+
+## Troubleshooting
+
+**`ros2: command not found`**
+Run `source ~/go_sim/go2_sim.env` — every terminal needs this.
+
+**Gazebo opens but shows a black screen**
+Add this to `~/go_sim/go2_sim.env` and re-source:
+```bash
+export LIBGL_ALWAYS_SOFTWARE=1
+```
+
+**`/usr/lib/wsl/lib` not found during install**
+Your Windows NVIDIA driver may be too old. Update to ≥ 510 from [nvidia.com](https://www.nvidia.com/Download/index.aspx).
+
+**`colcon build` fails**
+Check `~/go_sim/build.log` for the specific error. Most common cause is a missing apt package — re-run `rosdep install --from-paths src --ignore-src -r -y` and try again.
+
+**CycloneDDS warnings in the terminal**
+These are usually harmless on loopback. If topics aren't visible across terminals, confirm `RMW_IMPLEMENTATION=rmw_cyclonedds_cpp` is exported (it's set in `go2_sim.env`).
+
+---
+
+## Credits
+
+- [mike4192 — SpotMicro](https://github.com/mike4192/spotMicro)
+- [Unitree Robotics — A1 ROS](https://github.com/unitreerobotics/a1_ros)
+- [QUADRUPED ROBOTICS](https://quadruped.de)
+- [lnotspotl](https://github.com/lnotspotl)
+- [anujjain-dev — Unitree Go2 ROS2](https://github.com/anujjain-dev/unitree-go2-ros2)
+- Original simulation: [abutalipovvv/go2_ros2_sim_py](https://github.com/abutalipovvv/go2_ros2_sim_py)
+
+---
 
 ## TODO
 
-    Add Gazebo Classic support (physics and inertial parameters for URDF).
-    Perform odometry calibration 
+- Add Gazebo Classic support (physics and inertial parameters for URDF)
+- Odometry calibration
