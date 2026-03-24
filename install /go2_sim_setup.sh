@@ -52,7 +52,7 @@ sudo apt update -y
 sudo apt upgrade -y
 sudo apt install -y \
     curl wget git gnupg2 lsb-release \
-    build-essential cmake python3-pip python3-vcstool \
+    build-essential cmake python3-pip  \
     software-properties-common locales
 
 # Ensure UTF-8 locale (ROS2 requirement)
