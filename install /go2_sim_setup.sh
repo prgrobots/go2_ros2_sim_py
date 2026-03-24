@@ -157,7 +157,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 7 — Clone the repo and rosdep
 # ─────────────────────────────────────────────────────────────────────────────
-info "[7/9] Cloning go2_ros2_sim_py into ~/go_sim/src ..."
+info "[7/12] Cloning go2_ros2_sim_py into ~/go_sim/src ..."
 
 WORKSPACE="$HOME/go_sim"
 SRC="$WORKSPACE/src"
@@ -184,7 +184,7 @@ rosdep install --from-paths src --ignore-src -r -y
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 8 — colcon build
 # ─────────────────────────────────────────────────────────────────────────────
-info "[8/9] Building with colcon..."
+info "[8/12] Building sim workspace with colcon..."
 cd "$WORKSPACE"
 source /opt/ros/jazzy/setup.bash
 
@@ -200,7 +200,7 @@ fi
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 9 — Write environment setup files
 # ─────────────────────────────────────────────────────────────────────────────
-info "[9/9] Writing environment helpers..."
+info "[9/12] Writing sim environment helpers..."
 
 # --- CycloneDDS config ---
 CYCLONE_XML="$HOME/.ros/cyclonedds.xml"
@@ -269,23 +269,139 @@ BASHRC
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
+# STEP 10 — Clone go2_ros2_sdk (real dog bridge)
+# ─────────────────────────────────────────────────────────────────────────────
+info "[10/12] Cloning go2_ros2_sdk into ~/go2_sdk/src ..."
+
+SDK_WORKSPACE="$HOME/go2_sdk"
+SDK_SRC="$SDK_WORKSPACE/src"
+mkdir -p "$SDK_SRC"
+
+if [[ -d "$SDK_SRC/.git" ]]; then
+    warn "    SDK repo already cloned at $SDK_SRC — pulling latest..."
+    git -C "$SDK_SRC" pull
+    git -C "$SDK_SRC" submodule update --init --recursive
+else
+    git clone --recurse-submodules \
+        https://github.com/abizovnuralem/go2_ros2_sdk.git "$SDK_SRC"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 11 — SDK Python deps + rosdep + colcon build
+# ─────────────────────────────────────────────────────────────────────────────
+info "[11/12] Installing SDK Python deps and building..."
+
+# NOTE: go2_ros2_sdk targets Ubuntu 22.04 / Humble / Iron officially.
+# It builds on Jazzy but is untested upstream — flag any colcon errors.
+sudo apt install -y \
+    ros-jazzy-image-tools \
+    ros-jazzy-vision-msgs \
+    portaudio19-dev \
+    clang
+
+cd "$SDK_SRC"
+pip install -r requirements.txt --break-system-packages
+
+# open3d does not support python3.12 — skip it gracefully if it fails
+pip install open3d --break-system-packages 2>/dev/null \
+    || warn "    open3d skipped (no Python 3.12 wheel) — LiDAR 3D map saving won't work, everything else is fine."
+
+cd "$SDK_WORKSPACE"
+source /opt/ros/jazzy/setup.bash
+rosdep install --from-paths src --ignore-src -r -y
+
+colcon build \
+    --symlink-install \
+    --cmake-args -DCMAKE_BUILD_TYPE=Release \
+    2>&1 | tee "$SDK_WORKSPACE/build.log"
+
+if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
+    warn "go2_ros2_sdk colcon build had errors — see $SDK_WORKSPACE/build.log"
+    warn "This may be a Jazzy compatibility issue. Sim workspace is unaffected."
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STEP 12 — Write SDK environment file
+# ─────────────────────────────────────────────────────────────────────────────
+info "[12/12] Writing real-dog environment helper..."
+
+# CycloneDDS config for real dog — uses the network interface, NOT loopback
+CYCLONE_REAL_XML="$HOME/.ros/cyclonedds_real.xml"
+cat > "$CYCLONE_REAL_XML" <<'XML'
+<CycloneDDS>
+  <Domain>
+    <General>
+      <DontRoute>false</DontRoute>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <MaxAutoParticipantIndex>100</MaxAutoParticipantIndex>
+    </Discovery>
+  </Domain>
+</CycloneDDS>
+XML
+
+SDK_ENV_FILE="$SDK_WORKSPACE/go2_sdk.env"
+cat > "$SDK_ENV_FILE" <<EOF
+#!/usr/bin/env bash
+# Source this file before connecting to the real Go2:
+#   source ~/go2_sdk/go2_sdk.env
+#
+# Prerequisites:
+#   1. Connect your laptop WiFi to the Go2's network
+#   2. Find the robot IP in the Unitree app:
+#      Device → Data → Automatic Machine Inspection → STA Network: wlan0
+#   3. Close the Unitree mobile app — it holds the WebRTC slot
+#   4. Edit ROBOT_IP below
+
+source /opt/ros/jazzy/setup.bash
+source $SDK_WORKSPACE/install/local_setup.bash
+
+# ── Set your robot's IP here ─────────────────────────────────────────────────
+export ROBOT_IP="192.168.8.181"   # <-- change this to your Go2's IP
+export CONN_TYPE="webrtc"
+
+# CycloneDDS — real network (not loopback like the sim)
+export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+export CYCLONEDDS_URI=file://$CYCLONE_REAL_XML
+
+# NVIDIA WSL2 passthrough libs
+if [[ -d /usr/lib/wsl/lib ]]; then
+    export LD_LIBRARY_PATH=/usr/lib/wsl/lib:\${LD_LIBRARY_PATH:-}
+fi
+
+echo "[go2_sdk] Environment ready."
+echo "         ROBOT_IP=\$ROBOT_IP  CONN_TYPE=\$CONN_TYPE"
+echo "         Run: ros2 launch go2_robot_sdk robot.launch.py"
+echo ""
+echo "         NOTE: Close the Unitree app before connecting."
+echo "         NOTE: Do not source go2_sim.env in the same terminal."
+EOF
+chmod +x "$SDK_ENV_FILE"
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Done
 # ─────────────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║              Setup complete! How to run:                     ║${NC}"
+echo -e "${GREEN}║                   Setup complete!                            ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}║${NC}  1. Source the environment:                                  "
-echo -e "${GREEN}║${NC}       source ~/go_sim/go2_sim.env                            "
+echo -e "${GREEN}║${NC}  ── SIMULATION (no dog needed) ───────────────────────────── "
+echo -e "${GREEN}║${NC}  source ~/go_sim/go2_sim.env                                 "
+echo -e "${GREEN}║${NC}  ros2 launch gazebo_sim launch.py                            "
 echo -e "${GREEN}║${NC}                                                              "
-echo -e "${GREEN}║${NC}  2. Launch the simulation:                                   "
-echo -e "${GREEN}║${NC}       ros2 launch gazebo_sim launch.py                       "
+echo -e "${GREEN}║${NC}  ── REAL DOG ──────────────────────────────────────────────  "
+echo -e "${GREEN}║${NC}  1. Edit ROBOT_IP in ~/go2_sdk/go2_sdk.env                   "
+echo -e "${GREEN}║${NC}  2. Connect laptop WiFi to Go2 network                       "
+echo -e "${GREEN}║${NC}  3. Close the Unitree mobile app                             "
+echo -e "${GREEN}║${NC}  source ~/go2_sdk/go2_sdk.env                                "
+echo -e "${GREEN}║${NC}  ros2 launch go2_robot_sdk robot.launch.py                   "
 echo -e "${GREEN}║${NC}                                                              "
-echo -e "${GREEN}║${NC}  3. (New terminal) Drive the robot:                          "
-echo -e "${GREEN}║${NC}       source ~/go_sim/go2_sim.env                            "
-echo -e "${GREEN}║${NC}       ros2 run teleop_twist_keyboard teleop_twist_keyboard \\ "
-echo -e "${GREEN}║${NC}           --ros-args -r /cmd_vel:=/robot1/cmd_vel            "
+echo -e "${GREEN}║${NC}  ── TELEOP (works for both — change topic for sim) ────────  "
+echo -e "${GREEN}║${NC}  ros2 run teleop_twist_keyboard teleop_twist_keyboard \\      "
+echo -e "${GREEN}║${NC}    --ros-args -r /cmd_vel:=/robot1/cmd_vel   # sim           "
+echo -e "${GREEN}║${NC}    --ros-args -r /cmd_vel:=/cmd_vel          # real dog      "
 echo -e "${GREEN}║${NC}                                                              "
-echo -e "${GREEN}║${NC}  If Gazebo shows a black screen / crashes on GPU:            "
-echo -e "${GREEN}║${NC}    Add to go2_sim.env: export LIBGL_ALWAYS_SOFTWARE=1        "
+echo -e "${GREEN}║${NC}  If Gazebo black screen: export LIBGL_ALWAYS_SOFTWARE=1      "
+echo -e "${GREEN}║${NC}  SDK build log: ~/go2_sdk/build.log                          "
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
