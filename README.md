@@ -154,12 +154,29 @@ colcon build --symlink-install
 
 ## Running the Simulation
 
+### 0. Build the workspace (first time only)
+
+If you cloned this repo directly or haven't built yet:
+
+```bash
+cd ~/go_sim
+colcon build --symlink-install
+```
+
+This creates the `install/` directory and setup files required to run the simulator.
+
 ### 1. Source the environment
 
 Every terminal that runs ROS2 commands needs this first:
 
 ```bash
 source ~/go_sim/go2_sim.env
+```
+
+Or if you don't have the env file set up:
+
+```bash
+source ~/go_sim/install/local_setup.bash
 ```
 
 > If you get `ros2: command not found` — you forgot to source.
@@ -176,7 +193,17 @@ echo "source ~/go_sim/go2_sim.env" >> ~/.bashrc
 ros2 launch gazebo_sim launch.py
 ```
 
-### 3. Drive the robot
+### 3. Test the robot
+
+In a new terminal (after sourcing), run the test script:
+
+```bash
+bash ~/go_sim/test_robot.sh
+```
+
+This will make the robot walk → sit → stand up. You should see the robot respond in the Gazebo window.
+
+### 4. Drive the robot manually
 
 In a new terminal:
 
