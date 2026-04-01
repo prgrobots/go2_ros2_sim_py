@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
 # =============================================================================
-# go2_ros2_sim_py — Full WSL2 Setup Script
-# Target : WSL2 + Ubuntu 24.04 (Noble) + NVIDIA GPU (drivers on Windows host)
-# Stack  : ROS2 Jazzy + Gazebo Harmonic + Nav2 + CycloneDDS
-# Repo   : https://github.com/abutalipovvv/go2_ros2_sim_py
+# go2_ros2_sim_py — Native Linux Setup Script
+# Target : Ubuntu 24.04 (Noble) — bare metal or VM, NVIDIA GPU
+# Stack  : ROS2 Jazzy + Gazebo Harmonic + Nav2 + go2_ros2_sdk
+# Repo   : https://github.com/prgrobots/go2_ros2_sim_py
 #
-# Usage  : chmod +x go2_sim_setup.sh && ./go2_sim_setup.sh
+# Usage  : chmod +x go2_sim_setup_linux.sh && ./go2_sim_setup_linux.sh
 #
 # Notes  :
 #   - Run as your normal user (NOT root). Sudo is called internally where needed.
-#   - Your NVIDIA drivers live on the Windows host. Do NOT install NVIDIA drivers
-#     inside WSL2 — they are exposed automatically via /usr/lib/wsl/lib.
-#   - GUI (Gazebo/RViz) requires an X server on Windows:
-#       Recommended: VcXsrv or WSLg (built-in on Windows 11 / Win10 21H2+).
-#       If using WSLg you need nothing extra. If using VcXsrv, start it first
-#       with "Disable access control" checked.
+#   - Install NVIDIA drivers normally via Ubuntu before running this script:
+#       sudo ubuntu-drivers install
+#   - Gazebo and RViz2 display natively — no X server config needed.
 # =============================================================================
 
 set -eo pipefail
@@ -30,31 +27,30 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # ── Sanity checks ─────────────────────────────────────────────────────────────
 [[ "$EUID" -eq 0 ]] && error "Do not run as root. Run as your regular user."
 
-# Verify we are actually on Ubuntu 24.04
+# Verify Ubuntu 24.04
 if ! grep -q 'noble' /etc/os-release 2>/dev/null; then
     error "This script requires Ubuntu 24.04 (Noble). \
-You appear to be on a different distro/version. \
-Install Ubuntu 24.04 via PowerShell: wsl --install -d Ubuntu-24.04"
+You appear to be on a different distro/version."
 fi
 
-# Verify we are inside WSL2
-if ! grep -qi 'microsoft' /proc/version 2>/dev/null; then
-    warn "Could not confirm WSL2 environment — continuing anyway."
+# Refuse to run inside WSL2 — use go2_sim_setup.sh instead
+if grep -qi 'microsoft' /proc/version 2>/dev/null; then
+    error "WSL2 detected. Use go2_sim_setup.sh (the WSL2 version) instead."
 fi
 
-info "=== Starting go2_ros2_sim_py full setup ==="
-info "    Ubuntu 24.04 | ROS2 Jazzy | Gazebo Harmonic | WSL2 + NVIDIA"
+info "=== Starting go2_ros2_sim_py native Linux setup ==="
+info "    Ubuntu 24.04 | ROS2 Jazzy | Gazebo Harmonic | Native Linux"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 1 — System base update
 # ─────────────────────────────────────────────────────────────────────────────
-info "[1/9] Updating system packages..."
+info "[1/11] Updating system packages..."
 sudo apt update -y
 sudo apt upgrade -y
 sudo apt install -y \
     curl wget git gnupg2 lsb-release \
-    build-essential cmake python3-pip \
+    build-essential cmake python3-pip python3-vcstools \
     software-properties-common locales
 
 # Ensure UTF-8 locale (ROS2 requirement)
@@ -65,9 +61,8 @@ export LANG=en_US.UTF-8
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 2 — ROS2 Jazzy repository + install
 # ─────────────────────────────────────────────────────────────────────────────
-info "[2/9] Installing ROS2 Jazzy (desktop-full)..."
+info "[2/11] Installing ROS2 Jazzy (desktop-full)..."
 
-# Add ROS2 apt source via the official ros-apt-source package
 if ! dpkg -l ros2-apt-source &>/dev/null; then
     sudo apt install -y curl
     export ROS_APT_SOURCE_VERSION
@@ -81,7 +76,6 @@ fi
 
 sudo apt update -y
 
-# ros-jazzy-desktop includes: ROS2 core, RViz2, Gazebo Harmonic, ros_gz bridge
 sudo apt install -y \
     ros-jazzy-desktop \
     ros-dev-tools \
@@ -91,7 +85,7 @@ sudo apt install -y \
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 3 — Gazebo Harmonic extras & ros_gz bridge
 # ─────────────────────────────────────────────────────────────────────────────
-info "[3/9] Installing Gazebo Harmonic bridge and control packages..."
+info "[3/11] Installing Gazebo Harmonic bridge and control packages..."
 
 sudo apt install -y \
     ros-jazzy-ros-gz \
@@ -108,7 +102,7 @@ sudo apt install -y \
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 4 — Nav2 stack
 # ─────────────────────────────────────────────────────────────────────────────
-info "[4/9] Installing Nav2..."
+info "[4/11] Installing Nav2..."
 
 sudo apt install -y \
     ros-jazzy-navigation2 \
@@ -121,7 +115,7 @@ sudo apt install -y \
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 5 — CycloneDDS + teleop
 # ─────────────────────────────────────────────────────────────────────────────
-info "[5/9] Installing CycloneDDS and teleop tools..."
+info "[5/11] Installing CycloneDDS and teleop tools..."
 
 sudo apt install -y \
     ros-jazzy-rmw-cyclonedds-cpp \
@@ -130,36 +124,9 @@ sudo apt install -y \
     ros-jazzy-twist-mux
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 6 — WSL2 / NVIDIA GPU display stack
+# STEP 6 — Clone the repo and rosdep
 # ─────────────────────────────────────────────────────────────────────────────
-info "[6/9] Installing WSL2 GUI and GPU support libraries..."
-
-# Mesa for software/GL fallback; libGL symlinks for WSL2 NVIDIA passthrough
-sudo apt install -y \
-    mesa-utils \
-    libgl1-mesa-dri \
-    libgles2 \
-    libglvnd0 \
-    libglu1-mesa \
-    x11-apps
-
-# WSL2 NVIDIA GPU: drivers live at /usr/lib/wsl/lib on the host.
-# We need to make sure the ld path includes it.
-if [[ -d /usr/lib/wsl/lib ]]; then
-    info "    WSL2 NVIDIA libs detected at /usr/lib/wsl/lib ✓"
-    if ! grep -q 'wsl/lib' /etc/ld.so.conf.d/wsl-nvidia.conf 2>/dev/null; then
-        echo '/usr/lib/wsl/lib' | sudo tee /etc/ld.so.conf.d/wsl-nvidia.conf
-        sudo ldconfig
-    fi
-else
-    warn "    /usr/lib/wsl/lib not found. NVIDIA GPU passthrough may not be active."
-    warn "    Make sure your Windows NVIDIA driver is ≥ 510 and WSL2 GPU support is enabled."
-fi
-
-# ─────────────────────────────────────────────────────────────────────────────
-# STEP 7 — Clone the repo and rosdep
-# ─────────────────────────────────────────────────────────────────────────────
-info "[7/12] Cloning go2_ros2_sim_py into ~/go_sim/src ..."
+info "[6/11] Cloning go2_ros2_sim_py into ~/go_sim/src ..."
 
 WORKSPACE="$HOME/go_sim"
 SRC="$WORKSPACE/src"
@@ -184,9 +151,9 @@ cd "$WORKSPACE"
 rosdep install --from-paths src --ignore-src -r -y
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 8 — colcon build
+# STEP 7 — colcon build (sim)
 # ─────────────────────────────────────────────────────────────────────────────
-info "[8/12] Building sim workspace with colcon..."
+info "[7/11] Building sim workspace with colcon..."
 cd "$WORKSPACE"
 source /opt/ros/jazzy/setup.bash
 
@@ -200,22 +167,17 @@ if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 9 — Write environment setup files
+# STEP 8 — Write sim environment file
 # ─────────────────────────────────────────────────────────────────────────────
-info "[9/12] Writing sim environment helpers..."
+info "[8/11] Writing sim environment helper..."
 
-# --- CycloneDDS config ---
+# On native Linux CycloneDDS works fine with defaults — no loopback pinning needed.
+# We still set it explicitly for consistency with the real dog env file.
 CYCLONE_XML="$HOME/.ros/cyclonedds.xml"
 mkdir -p "$HOME/.ros"
 cat > "$CYCLONE_XML" <<'XML'
 <CycloneDDS>
   <Domain>
-    <General>
-      <Interfaces>
-        <NetworkInterface name="lo" multicast="true" />
-      </Interfaces>
-      <DontRoute>true</DontRoute>
-    </General>
     <Discovery>
       <ParticipantIndex>auto</ParticipantIndex>
       <MaxAutoParticipantIndex>100</MaxAutoParticipantIndex>
@@ -224,7 +186,6 @@ cat > "$CYCLONE_XML" <<'XML'
 </CycloneDDS>
 XML
 
-# --- go2_sim.env: source this before running anything ---
 ENV_FILE="$WORKSPACE/go2_sim.env"
 cat > "$ENV_FILE" <<EOF
 #!/usr/bin/env bash
@@ -234,32 +195,14 @@ cat > "$ENV_FILE" <<EOF
 source /opt/ros/jazzy/setup.bash
 source $WORKSPACE/install/local_setup.bash
 
-# CycloneDDS — required for multi-topic support in WSL2
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file://$CYCLONE_XML
-
-# Gazebo model/resource path
 export GZ_SIM_RESOURCE_PATH=$SRC/gazebo_sim/models
-
-# ── WSL2 display setup ────────────────────────────────────────────────────────
-# WSLg (Windows 11 / Win10 21H2+): works out of the box — nothing needed.
-# VcXsrv / Xming: uncomment and set DISPLAY manually:
-# export DISPLAY=\$(cat /etc/resolv.conf | grep nameserver | awk '{print \$2}'):0.0
-# export LIBGL_ALWAYS_INDIRECT=0
-
-# Force Mesa software rendering ONLY if NVIDIA passthrough is NOT working:
-# export LIBGL_ALWAYS_SOFTWARE=1
-
-# NVIDIA WSL2 passthrough libs
-if [[ -d /usr/lib/wsl/lib ]]; then
-    export LD_LIBRARY_PATH=/usr/lib/wsl/lib:\${LD_LIBRARY_PATH:-}
-fi
 
 echo "[go2_sim] Environment ready. Run: ros2 launch gazebo_sim launch.py"
 EOF
 chmod +x "$ENV_FILE"
 
-# ── Optionally append to .bashrc ──────────────────────────────────────────────
 BASHRC_MARKER="# go2_sim auto-source"
 if ! grep -q "$BASHRC_MARKER" "$HOME/.bashrc"; then
     cat >> "$HOME/.bashrc" <<BASHRC
@@ -271,9 +214,9 @@ BASHRC
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 10 — Clone go2_ros2_sdk (real dog bridge)
+# STEP 9 — Clone go2_ros2_sdk (real dog bridge)
 # ─────────────────────────────────────────────────────────────────────────────
-info "[10/12] Cloning go2_ros2_sdk into ~/go2_sdk/src ..."
+info "[9/11] Cloning go2_ros2_sdk into ~/go2_sdk/src ..."
 
 SDK_WORKSPACE="$HOME/go2_sdk"
 SDK_SRC="$SDK_WORKSPACE/src"
@@ -289,12 +232,10 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 11 — SDK Python deps + rosdep + colcon build
+# STEP 10 — SDK Python deps + rosdep + colcon build
 # ─────────────────────────────────────────────────────────────────────────────
-info "[11/12] Installing SDK Python deps and building..."
+info "[10/11] Installing SDK Python deps and building..."
 
-# NOTE: go2_ros2_sdk targets Ubuntu 22.04 / Humble / Iron officially.
-# It builds on Jazzy but is untested upstream — flag any colcon errors.
 sudo apt install -y \
     ros-jazzy-image-tools \
     ros-jazzy-vision-msgs \
@@ -304,7 +245,7 @@ sudo apt install -y \
 cd "$SDK_SRC"
 pip install -r requirements.txt --break-system-packages
 
-# open3d does not support python3.12 — skip it gracefully if it fails
+# open3d has no Python 3.12 wheel — skip gracefully
 pip install open3d --break-system-packages 2>/dev/null \
     || warn "    open3d skipped (no Python 3.12 wheel) — LiDAR 3D map saving won't work, everything else is fine."
 
@@ -323,11 +264,11 @@ if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 12 — Write SDK environment file
+# STEP 11 — Write SDK environment file
 # ─────────────────────────────────────────────────────────────────────────────
-info "[12/12] Writing real-dog environment helper..."
+info "[11/11] Writing real-dog environment helper..."
 
-# CycloneDDS config for real dog — uses the network interface, NOT loopback
+# CycloneDDS for real dog — needs to reach the Go2 over WiFi, not loopback
 CYCLONE_REAL_XML="$HOME/.ros/cyclonedds_real.xml"
 cat > "$CYCLONE_REAL_XML" <<'XML'
 <CycloneDDS>
@@ -363,14 +304,8 @@ source $SDK_WORKSPACE/install/local_setup.bash
 export ROBOT_IP="192.168.8.181"   # <-- change this to your Go2's IP
 export CONN_TYPE="webrtc"
 
-# CycloneDDS — real network (not loopback like the sim)
 export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 export CYCLONEDDS_URI=file://$CYCLONE_REAL_XML
-
-# NVIDIA WSL2 passthrough libs
-if [[ -d /usr/lib/wsl/lib ]]; then
-    export LD_LIBRARY_PATH=/usr/lib/wsl/lib:\${LD_LIBRARY_PATH:-}
-fi
 
 echo "[go2_sdk] Environment ready."
 echo "         ROBOT_IP=\$ROBOT_IP  CONN_TYPE=\$CONN_TYPE"
@@ -399,11 +334,11 @@ echo -e "${GREEN}║${NC}  3. Close the Unitree mobile app                      
 echo -e "${GREEN}║${NC}  source ~/go2_sdk/go2_sdk.env                                "
 echo -e "${GREEN}║${NC}  ros2 launch go2_robot_sdk robot.launch.py                   "
 echo -e "${GREEN}║${NC}                                                              "
-echo -e "${GREEN}║${NC}  ── TELEOP (works for both — change topic for sim) ────────  "
+echo -e "${GREEN}║${NC}  ── TELEOP ─────────────────────────────────────────────────  "
 echo -e "${GREEN}║${NC}  ros2 run teleop_twist_keyboard teleop_twist_keyboard \\      "
 echo -e "${GREEN}║${NC}    --ros-args -r /cmd_vel:=/robot1/cmd_vel   # sim           "
 echo -e "${GREEN}║${NC}    --ros-args -r /cmd_vel:=/cmd_vel          # real dog      "
 echo -e "${GREEN}║${NC}                                                              "
-echo -e "${GREEN}║${NC}  If Gazebo black screen: export LIBGL_ALWAYS_SOFTWARE=1      "
-echo -e "${GREEN}║${NC}  SDK build log: ~/go2_sdk/build.log                          "
+echo -e "${GREEN}║${NC}  Sim build log:  ~/go_sim/build.log                          "
+echo -e "${GREEN}║${NC}  SDK build log:  ~/go2_sdk/build.log                         "
 echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
