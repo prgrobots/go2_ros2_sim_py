@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================================
 # go2_ros2_sim_py — Full WSL2 Setup Script
-# Target : WSL2 + Ubuntu 24.04 (Noble) + NVIDIA GPU (drivers on Windows host)
-# Stack  : ROS2 Jazzy + Gazebo Harmonic + Nav2 + CycloneDDS
+# Target : WSL2 + Ubuntu 22.04 (Jammy) + NVIDIA GPU (drivers on Windows host)
+# Stack  : ROS2 Humble + Gazebo Garden + Nav2 + CycloneDDS
 # Repo   : https://github.com/abutalipovvv/go2_ros2_sim_py
 #
-# Usage  : chmod +x go2_sim_setup.sh && ./go2_sim_setup.sh
+# Usage  : chmod +x install_humble.sh && ./install_humble.sh
 #
 # Notes  :
 #   - Run as your normal user (NOT root). Sudo is called internally where needed.
@@ -30,11 +30,11 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 # ── Sanity checks ─────────────────────────────────────────────────────────────
 [[ "$EUID" -eq 0 ]] && error "Do not run as root. Run as your regular user."
 
-# Verify we are actually on Ubuntu 24.04
-if ! grep -q 'noble' /etc/os-release 2>/dev/null; then
-    error "This script requires Ubuntu 24.04 (Noble). \
+# Verify we are actually on Ubuntu 22.04
+if ! grep -q 'jammy' /etc/os-release 2>/dev/null; then
+    error "This script requires Ubuntu 22.04 (Jammy). \
 You appear to be on a different distro/version. \
-Install Ubuntu 24.04 via PowerShell: wsl --install -d Ubuntu-24.04"
+Install Ubuntu 22.04 via PowerShell: wsl --install -d Ubuntu-22.04"
 fi
 
 # Verify we are inside WSL2
@@ -43,7 +43,7 @@ if ! grep -qi 'microsoft' /proc/version 2>/dev/null; then
 fi
 
 info "=== Starting go2_ros2_sim_py full setup ==="
-info "    Ubuntu 24.04 | ROS2 Jazzy | Gazebo Harmonic | WSL2 + NVIDIA"
+info "    Ubuntu 22.04 | ROS2 Humble | Gazebo Garden | WSL2 + NVIDIA"
 echo ""
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -63,47 +63,41 @@ sudo update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 export LANG=en_US.UTF-8
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 2 — ROS2 Jazzy repository + install
+# STEP 2 — ROS2 Humble repository + install
 # ─────────────────────────────────────────────────────────────────────────────
-info "[2/9] Installing ROS2 Jazzy (desktop-full)..."
+info "[2/9] Installing ROS2 Humble (desktop-full)..."
 
-# Add ROS2 apt source via the official ros-apt-source package
-if ! dpkg -l ros2-apt-source &>/dev/null; then
-    sudo apt install -y curl
-    export ROS_APT_SOURCE_VERSION
-    ROS_APT_SOURCE_VERSION=$(curl -s \
-        https://api.github.com/repos/ros-infrastructure/ros-apt-source/releases/latest \
-        | grep -F "tag_name" | awk -F\" '{print $4}')
-    curl -L -o /tmp/ros2-apt-source.deb \
-        "https://github.com/ros-infrastructure/ros-apt-source/releases/download/${ROS_APT_SOURCE_VERSION}/ros2-apt-source_${ROS_APT_SOURCE_VERSION}.$(. /etc/os-release && echo "${UBUNTU_CODENAME:-${VERSION_CODENAME}}")_all.deb"
-    sudo dpkg -i /tmp/ros2-apt-source.deb
+# Add ROS2 Humble apt repository using official method
+if ! grep -q 'humble' /etc/apt/sources.list.d/ros*.list 2>/dev/null; then
+    sudo curl -sSL https://repo.ros2.org/ros.key | sudo apt-key add -
+    echo "deb [arch=$(dpkg --print-architecture)] http://repo.ros2.org/ubuntu/main $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/ros2-humble.list > /dev/null
 fi
 
 sudo apt update -y
 
-# ros-jazzy-desktop includes: ROS2 core, RViz2, Gazebo Harmonic, ros_gz bridge
+# ros-humble-desktop includes: ROS2 core, RViz2, Gazebo, ros_gz bridge
 sudo apt install -y \
-    ros-jazzy-desktop \
+    ros-humble-desktop \
     ros-dev-tools \
     python3-colcon-common-extensions \
     python3-rosdep
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STEP 3 — Gazebo Harmonic extras & ros_gz bridge
+# STEP 3 — Gazebo Garden extras & ros_gz bridge
 # ─────────────────────────────────────────────────────────────────────────────
-info "[3/9] Installing Gazebo Harmonic bridge and control packages..."
+info "[3/9] Installing Gazebo Garden bridge and control packages..."
 
 sudo apt install -y \
-    ros-jazzy-ros-gz \
-    ros-jazzy-ros-gz-bridge \
-    ros-jazzy-ros-gz-sim \
-    ros-jazzy-gz-ros2-control \
-    ros-jazzy-ros2-control \
-    ros-jazzy-ros2-controllers \
-    ros-jazzy-joint-state-publisher \
-    ros-jazzy-joint-state-publisher-gui \
-    ros-jazzy-robot-state-publisher \
-    ros-jazzy-xacro
+    ros-humble-ros-gzserver \
+    ros-humble-ros-gzclient \
+    ros-humble-ros-gz-bridge \
+    ros-humble-ros-gz-sim-demos \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-joint-state-publisher \
+    ros-humble-joint-state-publisher-gui \
+    ros-humble-robot-state-publisher \
+    ros-humble-xacro
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 4 — Nav2 stack
@@ -111,12 +105,12 @@ sudo apt install -y \
 info "[4/9] Installing Nav2..."
 
 sudo apt install -y \
-    ros-jazzy-navigation2 \
-    ros-jazzy-nav2-bringup \
-    ros-jazzy-nav2-map-server \
-    ros-jazzy-nav2-lifecycle-manager \
-    ros-jazzy-nav2-bt-navigator \
-    ros-jazzy-slam-toolbox
+    ros-humble-navigation2 \
+    ros-humble-nav2-bringup \
+    ros-humble-nav2-map-server \
+    ros-humble-nav2-lifecycle-manager \
+    ros-humble-nav2-bt-navigator \
+    ros-humble-slam-toolbox
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 5 — CycloneDDS + teleop
@@ -124,10 +118,10 @@ sudo apt install -y \
 info "[5/9] Installing CycloneDDS and teleop tools..."
 
 sudo apt install -y \
-    ros-jazzy-rmw-cyclonedds-cpp \
-    ros-jazzy-teleop-twist-keyboard \
-    ros-jazzy-teleop-twist-joy \
-    ros-jazzy-twist-mux
+    ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-teleop-twist-keyboard \
+    ros-humble-teleop-twist-joy \
+    ros-humble-twist-mux
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 6 — WSL2 / NVIDIA GPU display stack
@@ -173,7 +167,7 @@ else
 fi
 
 # Bootstrap rosdep
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 if [[ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]]; then
     sudo rosdep init
 fi
@@ -188,7 +182,7 @@ rosdep install --from-paths src --ignore-src -r -y
 # ─────────────────────────────────────────────────────────────────────────────
 info "[8/12] Building sim workspace with colcon..."
 cd "$WORKSPACE"
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 
 colcon build \
     --symlink-install \
@@ -231,7 +225,7 @@ cat > "$ENV_FILE" <<EOF
 # Source this file before launching the simulation:
 #   source ~/go_sim/go2_sim.env
 
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source $WORKSPACE/install/local_setup.bash
 
 # CycloneDDS — required for multi-topic support in WSL2
@@ -294,10 +288,9 @@ fi
 info "[11/12] Installing SDK Python deps and building..."
 
 # NOTE: go2_ros2_sdk targets Ubuntu 22.04 / Humble / Iron officially.
-# It builds on Jazzy but is untested upstream — flag any colcon errors.
 sudo apt install -y \
-    ros-jazzy-image-tools \
-    ros-jazzy-vision-msgs \
+    ros-humble-image-tools \
+    ros-humble-vision-msgs \
     portaudio19-dev \
     clang
 
@@ -309,7 +302,7 @@ pip install open3d --break-system-packages 2>/dev/null \
     || warn "    open3d skipped (no Python 3.12 wheel) — LiDAR 3D map saving won't work, everything else is fine."
 
 cd "$SDK_WORKSPACE"
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 rosdep install --from-paths src --ignore-src -r -y
 
 colcon build \
@@ -319,7 +312,7 @@ colcon build \
 
 if [[ ${PIPESTATUS[0]} -ne 0 ]]; then
     warn "go2_ros2_sdk colcon build had errors — see $SDK_WORKSPACE/build.log"
-    warn "This may be a Jazzy compatibility issue. Sim workspace is unaffected."
+    warn "This may be a compatibility issue. Sim workspace is unaffected."
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -356,7 +349,7 @@ cat > "$SDK_ENV_FILE" <<EOF
 #   3. Close the Unitree mobile app — it holds the WebRTC slot
 #   4. Edit ROBOT_IP below
 
-source /opt/ros/jazzy/setup.bash
+source /opt/ros/humble/setup.bash
 source $SDK_WORKSPACE/install/local_setup.bash
 
 # ── Set your robot's IP here ─────────────────────────────────────────────────
