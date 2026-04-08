@@ -74,6 +74,7 @@ sudo apt upgrade
 sudo apt install ros-humble-desktop
 sudo apt install ros-dev-tools
 
+source /opt/ros/humble/setup.bash
 echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
 
 mkdir -p ~/ros2_ws
@@ -93,3 +94,4 @@ colcon build
 
 
 echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
+source ~/ros2_ws/install/setup.bash
