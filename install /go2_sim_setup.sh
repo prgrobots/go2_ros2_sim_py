@@ -31,11 +31,6 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 [[ "$EUID" -eq 0 ]] && error "Do not run as root. Run as your regular user."
 
 # Verify we are actually on Ubuntu 22.04
-if ! grep -q 'jammy' /etc/os-release 2>/dev/null; then
-    error "This script requires Ubuntu 22.04 (Jammy). \
-You appear to be on a different distro/version. \
-Install Ubuntu 22.04 via PowerShell: wsl --install -d Ubuntu-22.04"
-fi
 
 # Verify we are inside WSL2
 if ! grep -qi 'microsoft' /proc/version 2>/dev/null; then
