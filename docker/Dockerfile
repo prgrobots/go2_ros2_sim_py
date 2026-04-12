@@ -49,7 +49,7 @@ RUN  --mount=type=cache,target=/var/cache/apt,sharing=locked \
   python3 python3-pip
 
 # Установка colcon-cache
-RUN pip3 install --break-system-packages git+https://github.com/ruffsl/colcon-cache.git
+RUN pip3 install git+https://github.com/ruffsl/colcon-cache.git
 
 # Копируем исходный код
 COPY ../ /root/ws/src
