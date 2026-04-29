@@ -289,12 +289,12 @@ sudo apt install -y \
     portaudio19-dev \
     clang
 
-cd "$SDK_SRC"
-pip install -r requirements.txt --break-system-packages
+#cd "$SDK_SRC"
+#pip install -r requirements.txt --break-system-packages
 
 # open3d does not support python3.12 — skip it gracefully if it fails
-pip install open3d --break-system-packages 2>/dev/null \
-    || warn "    open3d skipped (no Python 3.12 wheel) — LiDAR 3D map saving won't work, everything else is fine."
+#pip install open3d --break-system-packages 2>/dev/null \#
+|| warn "    open3d skipped (no Python 3.12 wheel) — LiDAR 3D map saving won't work, everything else is fine."
 
 cd "$SDK_WORKSPACE"
 source /opt/ros/humble/setup.bash
