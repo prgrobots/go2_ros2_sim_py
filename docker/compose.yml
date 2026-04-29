@@ -55,15 +55,15 @@ services:
       RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
       GAZEBO_RESOURCE_PATH: "/usr/share/gazebo-11"
       GZ_SIM_RESOURCE_PATH: "/root/ws/src/gazebo_sim/models/"
-      GAZEBO_MODEL_PATH: "/usr/share/gazebo-11/models/:/opt/ros/humble/share/turtlebot3_gazebo/models/"
+      GAZEBO_MODEL_PATH: "/usr/share/gazebo-11/models/:/opt/ros/jazzy/share/turtlebot3_gazebo/models/"
       CYCLONEDDS_URI: file:///cyclonedds.xml
       ROS_DOMAIN_ID: 0
     build:
       context: ..
       dockerfile: docker/Dockerfile
       args:
-        ROS_DISTRO: humble
-        BASE_IMG: ros:humble
+        ROS_DISTRO: jazzy
+        BASE_IMG: ros:jazzy
     volumes:
       - ./cyclonedds.xml:/cyclonedds.xml
       - ./../:/root/ws/src/

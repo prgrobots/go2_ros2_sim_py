@@ -1,6 +1,17 @@
 ARG BASE_IMG
 FROM ${BASE_IMG}
 
+# Add OSRF repository for Gazebo Garden packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget \
+    gnupg2 \
+    curl
+
+RUN curl -sSL https://packages.osrfoundation.org/gazebo.gpg -o /tmp/gazebo.gpg && \
+    apt-key add /tmp/gazebo.gpg && \
+    sh -c 'echo "deb [arch=$(dpkg --print-architecture)] http://packages.osrfoundation.org/gazebo/ubuntu jammy main" > /etc/apt/sources.list.d/gazebo.list' && \
+    rm /tmp/gazebo.gpg
+
 # Кэширование apt-get
 RUN  --mount=type=cache,target=/var/cache/apt,sharing=locked \
   --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -30,8 +41,10 @@ RUN  --mount=type=cache,target=/var/cache/apt,sharing=locked \
   ros-humble-tf-transformations \
   ros-humble-teleop-twist-keyboard \
   ros-humble-ros2-controllers \
-  ros-humble-ros-gz-image \
-  ros-humble-ros-gz-bridge \
+  ros-humble-ros-gzgarden \
+  ros-humble-ros-gzgarden-bridge \
+  ros-humble-ros-gzgarden-image \
+  ros-humble-ros-gzgarden-sim \
   ros-humble-opennav-docking \
   ros-humble-apriltag-ros \
   ros-humble-apriltag-msgs \
