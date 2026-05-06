@@ -290,23 +290,11 @@ sudo apt install -y \
     clang
 
 cd "$SDK_SRC"
+pip install -r requirements.txt --break-system-packages
 
-# Install only essential dependencies (core SDK needs aiortc, aiohttp, etc.)
-# Skip heavy ML packages (torch, torchvision, open3d) that often fail on WSL2
-pip install \
-    aiortc==1.9.0 \
-    aiohttp \
-    paho-mqtt \
-    python-dotenv \
-    pycryptodome \
-    opencv-python \
-    pydub \
-    --break-system-packages
-
-# Optional: Try to install ML packages separately (these may fail safely)
-# open3d and torch are not required for core SDK functionality
-warn "    Skipping heavy ML packages (torch, torchvision, open3d) — core SDK works without them."
-warn "    If you need ML features, install manually later: pip install torch torchvision open3d"
+# open3d does not support python3.12 — skip it gracefully if it fails
+pip install open3d --break-system-packages 2>/dev/null \
+    || warn "    open3d skipped (no Python 3.12 wheel) — LiDAR 3D map saving won't work, everything else is fine."
 
 cd "$SDK_WORKSPACE"
 source /opt/ros/humble/setup.bash
