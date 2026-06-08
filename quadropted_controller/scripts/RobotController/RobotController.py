@@ -41,6 +41,7 @@ class Robot:
         self.state = State(self.default_height)
         self.state.foot_locations = self.default_stance
         self.command = Command(self.default_height)
+        self._frozen = False
 
                 # Установить режим TROT по умолчанию
         self.command.trot_event = True
@@ -152,6 +153,16 @@ class Robot:
             response.success = True
             response.message = "Робот начал ходить."
         
+        elif command == 'freeze':
+            self._frozen = True
+            response.success = True
+            response.message = "Controller frozen."
+
+        elif command == 'unfreeze':
+            self._frozen = False
+            response.success = True
+            response.message = "Controller unfrozen."
+
         else:
             response.success = False
             response.message = f"Неизвестная команда: {command}"

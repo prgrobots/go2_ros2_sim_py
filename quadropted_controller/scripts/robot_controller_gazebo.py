@@ -44,6 +44,8 @@ class RobotControllerNode(Node):
         self.timer = self.create_timer(1.0 / RATE, self.control_loop)
 
     def control_loop(self):
+        if self.robot._frozen:
+            return
         if self.verbose:
             self.get_logger().info("Control loop triggered")
         
